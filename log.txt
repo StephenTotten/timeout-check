@@ -1,4 +1,4 @@
-12/03/22 08:51:01, INFO : Process 1 - Start
+12/03/22 08:51:01 INFO : Process 1 - Start
 12/03/22 08:51:20 INFO : Process 2 - Start
 12/03/22 08:51:20 INFO : Process 1 - End
 12/03/22 08:52:01 INFO : Process 3 - Start
