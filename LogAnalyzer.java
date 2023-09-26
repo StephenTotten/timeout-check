@@ -1,72 +1,88 @@
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class LogAnalyzer {
     public static void main(String[] args) {
-        String fileName = "log.txt";
+        // Define the log file path
+        String logFilePath = "log.txt";
 
-        try {
-            BufferedReader br = new BufferedReader(new FileReader(fileName));
+        // Define the timeout threshold (in seconds)
+        int timeoutThreshold = 30;
+
+        // Initialize data structures to store results
+        Map<String, Map<String, List<Long>>> dateProcessMap = new TreeMap<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(logFilePath))) {
             String line;
             SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
-
-            Map<String, Map<String, List<Integer>>> dateProcessMap = new HashMap<>();
-
             while ((line = br.readLine()) != null) {
                 String[] parts = line.split(" : ");
-                if (parts.length == 2) {
-                    String timestampStr = parts[0];
-                    String logMessage = parts[1];
-                    Date timestamp = dateFormat.parse(timestampStr);
-                    Calendar calendar = Calendar.getInstance();
-                    calendar.setTime(timestamp);
+                if (parts.length >= 2) {
+                    String dateTimeString = parts[0];
+                    String processInfo = parts[1];
 
-                    String dateKey = new SimpleDateFormat("dd/MM/yy").format(calendar.getTime());
-                    int processId = Integer.parseInt(logMessage.split(" ")[1]);
+                    try {
+                        Date dateTime = dateFormat.parse(dateTimeString);
+                        String dateKey = new SimpleDateFormat("dd/MM/yy").format(dateTime);
 
-                    dateProcessMap.putIfAbsent(dateKey, new HashMap<>());
-                    Map<String, List<Integer>> processMap = dateProcessMap.get(dateKey);
-                    processMap.putIfAbsent("success", new ArrayList<>());
-                    processMap.putIfAbsent("timeouts", new ArrayList<>());
+                        if (!dateProcessMap.containsKey(dateKey)) {
+                            dateProcessMap.put(dateKey, new HashMap<>());
+                        }
 
-                    if (logMessage.contains("Start")) {
-                        processMap.get("success").add(processId);
-                    } else if (logMessage.contains("End")) {
-                        processMap.get("timeouts").add(processId);
+                        if (processInfo.contains("Start")) {
+                            String processId = processInfo.split(" ")[1];
+                            dateProcessMap.get(dateKey).putIfAbsent(processId, new ArrayList<>());
+                            dateProcessMap.get(dateKey).get(processId).add(dateTime.getTime());
+                        } else if (processInfo.contains("End")) {
+                            String processId = processInfo.split(" ")[1];
+                            if (dateProcessMap.get(dateKey).containsKey(processId)) {
+                                List<Long> startTimes = dateProcessMap.get(dateKey).get(processId);
+                                long elapsedTime = (dateTime.getTime() - startTimes.get(startTimes.size() - 1)) / 1000;
+                                if (elapsedTime <= timeoutThreshold) {
+                                    dateProcessMap.get(dateKey).putIfAbsent("success", new ArrayList<>());
+                                    dateProcessMap.get(dateKey).get("success").add(Long.parseLong(processId));
+                                } else {
+                                    dateProcessMap.get(dateKey).putIfAbsent("timeouts", new ArrayList<>());
+                                    dateProcessMap.get(dateKey).get("timeouts").add(Long.parseLong(processId));
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
                 }
             }
 
-            // Output with Count
+            // Print the results
             System.out.println("Output with Count");
-            List<Map<String, Map<String, Integer>>> countOutputList = new ArrayList<>();
-            for (Map.Entry<String, Map<String, List<Integer>>> entry : dateProcessMap.entrySet()) {
-                Map<String, Map<String, Integer>> dateMap = new HashMap<>();
-                Map<String, List<Integer>> processMap = entry.getValue();
-                Map<String, Integer> countMap = new HashMap<>();
-                countMap.put("success", processMap.get("success").size());
-                countMap.put("timeouts", processMap.get("timeouts").size());
-                dateMap.put(entry.getKey(), countMap);
-                countOutputList.add(dateMap);
-            }
-            System.out.println(countOutputList);
+            System.out.println(dateProcessMap);
 
-            // Output with Process Id
             System.out.println("\nOutput with Process Id");
-            List<Map<String, Map<String, List<Integer>>>> processIdOutputList = new ArrayList<>();
-            for (Map.Entry<String, Map<String, List<Integer>>> entry : dateProcessMap.entrySet()) {
-                Map<String, Map<String, List<Integer>>> dateMap = new HashMap<>();
-                dateMap.put(entry.getKey(), entry.getValue());
-                processIdOutputList.add(dateMap);
+            for (String dateKey : dateProcessMap.keySet()) {
+                System.out.println("{");
+                System.out.println("\"" + dateKey + "\":{");
+                Map<String, List<Long>> processData = dateProcessMap.get(dateKey);
+                for (String dataType : processData.keySet()) {
+                    System.out.print(dataType + ": [");
+                    List<Long> dataList = processData.get(dataType);
+                    for (int i = 0; i < dataList.size(); i++) {
+                        System.out.print(dataList.get(i));
+                        if (i < dataList.size() - 1) {
+                            System.out.print(", ");
+                        }
+                    }
+                    System.out.print("]");
+                    if (!dataType.equals("timeouts")) {
+                        System.out.println(",");
+                    }
+                }
+                System.out.println("\n}");
+                System.out.println("}");
             }
-            System.out.println(processIdOutputList);
-
-            br.close();
-        } catch (IOException | ParseException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
